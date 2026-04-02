@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BFF Gateway Demo</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f8f9fa; color: #333; }
+    .header { background: #fff; border-bottom: 1px solid #e9ecef; padding: 20px 24px; text-align: center; }
+    .header h1 { font-size: 22px; margin-bottom: 6px; }
+    .header p { font-size: 13px; color: #868e96; max-width: 600px; margin: 0 auto; }
+    .main { max-width: 960px; margin: 24px auto; padding: 0 24px; }
+
+    /* Dashboard Cards */
+    .dashboard { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 24px; }
+    .dash-card { background: #fff; border-radius: 8px; border: 2px solid #e9ecef; padding: 16px; min-height: 100px; transition: all 0.3s; }
+    .dash-card.loading { background: #f8f9fa; }
+    .dash-card.loaded { border-color: #51cf66; }
+    .dash-card.degraded { border-color: #ffa94d; background: #fff9f0; }
+    .dash-card.error { border-color: #ff6b6b; background: #fff5f5; }
+    .dash-card h4 { font-size: 12px; color: #868e96; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .dash-card .value { font-size: 15px; color: #333; }
+    .dash-card .fallback-tag { display: inline-block; font-size: 10px; background: #fff3bf; color: #e67700; padding: 1px 6px; border-radius: 3px; margin-top: 6px; }
+    .skeleton { height: 14px; background: linear-gradient(90deg, #eee 25%, #f5f5f5 50%, #eee 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; border-radius: 4px; margin-bottom: 6px; }
+    .skeleton.short { width: 60%; }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* Controls */
+    .controls { background: #fff; border-radius: 8px; border: 1px solid #e9ecef; padding: 20px; margin-bottom: 16px; }
+    .controls h3 { font-size: 14px; margin-bottom: 4px; }
+    .controls .desc { font-size: 12px; color: #868e96; margin-bottom: 16px; }
+    .btn-row { display: flex; gap: 12px; align-items: center; }
+    button { padding: 10px 20px; border: 1px solid #dee2e6; border-radius: 6px; background: #fff; cursor: pointer; font-size: 13px; font-weight: 500; transition: all 0.15s; }
+    button:hover:not(:disabled) { background: #f1f3f5; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    button.primary { background: #1677ff; color: #fff; border-color: #1677ff; }
+    button.primary:hover:not(:disabled) { background: #0b5ed7; }
+    button.success { background: #51cf66; color: #fff; border-color: #51cf66; }
+    button.success:hover:not(:disabled) { background: #40c057; }
+    .btn-hint { font-size: 11px; color: #adb5bd; }
+
+    /* Request Timeline */
+    .timeline { background: #fff; border-radius: 8px; border: 1px solid #e9ecef; padding: 16px; margin-bottom: 16px; }
+    .timeline h4 { font-size: 12px; color: #868e96; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 12px; }
+    .timeline-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 13px; border-bottom: 1px solid #f1f3f5; animation: fadeIn 0.3s; }
+    .timeline-row:last-child { border-bottom: none; }
+    .timeline-row .svc { width: 140px; font-weight: 500; }
+    .timeline-row .bar-wrap { flex: 1; height: 20px; background: #f1f3f5; border-radius: 4px; overflow: hidden; }
+    .timeline-row .bar { height: 100%; border-radius: 4px; transition: width 0.5s; }
+    .timeline-row .bar.ok { background: #51cf66; }
+    .timeline-row .bar.fail { background: #ff6b6b; }
+    .timeline-row .bar.cache { background: #ffd43b; }
+    .timeline-row .time { width: 70px; text-align: right; font-size: 12px; color: #868e96; }
+    .timeline-row .status { width: 24px; text-align: center; }
+    .timeline-summary { margin-top: 12px; padding-top: 12px; border-top: 1px solid #e9ecef; font-size: 13px; display: flex; justify-content: space-between; }
+    .timeline-summary .total { font-weight: 600; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+
+    /* Result JSON */
+    .result-section { background: #fff; border-radius: 8px; border: 1px solid #e9ecef; padding: 16px; }
+    .result-section h4 { font-size: 12px; color: #868e96; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; cursor: pointer; }
+    .result-section pre { background: #f8f9fa; border: 1px solid #e9ecef; border-radius: 6px; padding: 12px; font-size: 11px; max-height: 200px; overflow: auto; white-space: pre-wrap; word-break: break-all; }
+    .hidden { display: none; }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <h1>🔀 BFF Gateway Demo</h1>
+    <p>Experience the difference: load a dashboard with and without a BFF layer. See how API aggregation, caching, and graceful degradation work in practice.</p>
+  </div>
+
+  <div class="main">
+    <!-- Dashboard UI -->
+    <div class="dashboard" id="dashboard">
+      <div class="dash-card" id="card-user"><h4>👤 User</h4><div class="value" id="val-user"><div class="skeleton"></div><div class="skeleton short"></div></div></div>
+      <div class="dash-card" id="card-orders"><h4>📦 Recent Orders</h4><div class="value" id="val-orders"><div class="skeleton"></div><div class="skeleton short"></div></div></div>
+      <div class="dash-card" id="card-messages"><h4>💬 Messages</h4><div class="value" id="val-messages"><div class="skeleton"></div><div class="skeleton short"></div></div></div>
+      <div class="dash-card" id="card-config"><h4>⚙️ System</h4><div class="value" id="val-config"><div class="skeleton"></div><div class="skeleton short"></div></div></div>
+    </div>
+
+    <!-- Controls -->
+    <div class="controls">
+      <h3>Load Dashboard Data</h3>
+      <p class="desc">Try "Without BFF" first to feel the pain, then try "With BFF" to see the difference.</p>
+      <div class="btn-row">
+        <button class="primary" id="btn-without" onclick="loadWithoutBFF()">① Without BFF (6 requests)</button>
+        <button class="success" id="btn-with" onclick="loadWithBFF()">② With BFF (1 request)</button>
+        <button id="btn-reset" onclick="resetAll()">Reset</button>
+        <span class="btn-hint" id="hint"></span>
+      </div>
+    </div>
+
+    <!-- Request Timeline -->
+    <div class="timeline" id="timeline-section" style="display:none">
+      <h4 id="timeline-title">Request Timeline</h4>
+      <div id="timeline-rows"></div>
+      <div class="timeline-summary" id="timeline-summary" style="display:none">
+        <span>Total requests: <span class="total" id="sum-count">0</span></span>
+        <span>Total time: <span class="total" id="sum-time">0ms</span></span>
+      </div>
+    </div>
+
+    <!-- Raw JSON (collapsed) -->
+    <div class="result-section">
+      <h4 onclick="document.getElementById('raw-json').classList.toggle('hidden')">▶ Raw JSON Response (click to toggle)</h4>
+      <pre id="raw-json" class="hidden">Click a button above to load data...</pre>
+    </div>
+  </div>
+
+  <script>
+    var SERVICES = [
+      { key: 'user', name: 'User Service', url: '/bff/proxy/user' },
+      { key: 'permissions', name: 'Permissions', url: '/bff/proxy/permissions' },
+      { key: 'orders', name: 'Order Service', url: '/bff/proxy/orders' },
+      { key: 'orderStats', name: 'Order Stats', url: '/bff/proxy/order-stats' },
+      { key: 'messages', name: 'Message Service', url: '/bff/proxy/messages' },
+      { key: 'config', name: 'Config Service', url: '/bff/proxy/config' },
+    ];
+
+    function resetAll() {
+      // Reset cards to skeleton
+      ['user','orders','messages','config'].forEach(function(id) {
+        var card = document.getElementById('card-' + id);
+        card.className = 'dash-card';
+        document.getElementById('val-' + id).innerHTML = '<div class="skeleton"></div><div class="skeleton short"></div>';
+      });
+      document.getElementById('timeline-section').style.display = 'none';
+      document.getElementById('timeline-rows').innerHTML = '';
+      document.getElementById('timeline-summary').style.display = 'none';
+      document.getElementById('raw-json').textContent = '';
+      document.getElementById('hint').textContent = '';
+      document.getElementById('btn-without').disabled = false;
+      document.getElementById('btn-with').disabled = false;
+    }
+
+    function setCard(id, html, state) {
+      var card = document.getElementById('card-' + id);
+      card.className = 'dash-card ' + state;
+      document.getElementById('val-' + id).innerHTML = html;
+    }
+
+    function addTimelineRow(name, status, timeMs, source) {
+      var rows = document.getElementById('timeline-rows');
+      var icon = status === 'ok' ? '✅' : status === 'cache' ? '💾' : '❌';
+      var barClass = status === 'ok' ? 'ok' : status === 'cache' ? 'cache' : 'fail';
+      var barWidth = Math.min(100, Math.max(5, timeMs / 6));
+      var row = document.createElement('div');
+      row.className = 'timeline-row';
+      row.innerHTML = '<span class="svc">' + name + '</span>' +
+        '<div class="bar-wrap"><div class="bar ' + barClass + '" style="width:' + barWidth + '%"></div></div>' +
+        '<span class="time">' + timeMs + 'ms</span>' +
+        '<span class="status">' + icon + '</span>';
+      rows.appendChild(row);
+    }
+
+    /* ── Without BFF: 6 separate requests ── */
+    async function loadWithoutBFF() {
+      resetAll();
+      document.getElementById('btn-without').disabled = true;
+      document.getElementById('btn-with').disabled = true;
+      document.getElementById('hint').textContent = 'Sending 6 separate requests...';
+      document.getElementById('timeline-section').style.display = 'block';
+      document.getElementById('timeline-title').textContent = 'Without BFF — 6 Separate Requests';
+
+      var allResults = [];
+      var totalStart = Date.now();
+
+      for (var i = 0; i < SERVICES.length; i++) {
+        var svc = SERVICES[i];
+        var t = Date.now();
+        try {
+          var res = await fetch(svc.url);
+          var data = await res.json();
+          var elapsed = Date.now() - t;
+          var failed = data.code && data.code !== 200;
+          addTimelineRow(svc.name, failed ? 'fail' : 'ok', elapsed);
+          allResults.push({ service: svc.key, data: data, failed: failed, time: elapsed });
+        } catch(e) {
+          addTimelineRow(svc.name, 'fail', Date.now() - t);
+          allResults.push({ service: svc.key, data: null, failed: true, time: Date.now() - t });
+        }
+      }
+
+      var totalTime = Date.now() - totalStart;
+      document.getElementById('timeline-summary').style.display = 'flex';
+      document.getElementById('sum-count').textContent = SERVICES.length;
+      document.getElementById('sum-time').textContent = totalTime + 'ms';
+
+      // Fill dashboard cards (frontend has to unwrap { code, data } itself)
+      allResults.forEach(function(r) {
+        if (r.service === 'user') {
+          if (r.failed || !r.data?.data) { setCard('user', '<span style="color:#e03131">Service failed</span>', 'error'); }
+          else { var u = r.data.data; setCard('user', u.name + '<br><span style="color:#868e96;font-size:12px">' + u.role + ' · ' + u.department + '</span>', 'loaded'); }
+        }
+        if (r.service === 'orders') {
+          if (r.failed || !r.data?.data) { setCard('orders', '<span style="color:#e03131">Service failed</span>', 'error'); }
+          else { var o = r.data.data; setCard('orders', o.total + ' orders<br><span style="color:#868e96;font-size:12px">Latest: ' + (o.orders[0]?.product || '-') + '</span>', 'loaded'); }
+        }
+        if (r.service === 'messages') {
+          if (r.failed || !r.data?.data) { setCard('messages', '<span style="color:#e03131">Service failed</span>', 'error'); }
+          else { var m = r.data.data; setCard('messages', m.count + ' unread<br><span style="color:#868e96;font-size:12px">' + (m.messages[0]?.title || '-') + '</span>', 'loaded'); }
+        }
+        if (r.service === 'config') {
+          if (r.failed || !r.data?.data) { setCard('config', '<span style="color:#e03131">Service failed</span>', 'error'); }
+          else { var c = r.data.data; setCard('config', 'v' + c.version + '<br><span style="color:#868e96;font-size:12px">Dark mode: ' + (c.features.darkMode ? 'on' : 'off') + '</span>', 'loaded'); }
+        }
+      });
+
+      document.getElementById('raw-json').textContent = JSON.stringify(allResults.map(function(r){return r.data;}), null, 2);
+      document.getElementById('hint').textContent = 'Done. Now try "With BFF" to compare.';
+      document.getElementById('btn-with').disabled = false;
+    }
+
+    /* ── With BFF: 1 aggregated request ── */
+    async function loadWithBFF() {
+      resetAll();
+      document.getElementById('btn-without').disabled = true;
+      document.getElementById('btn-with').disabled = true;
+      document.getElementById('hint').textContent = 'Sending 1 aggregated request...';
+      document.getElementById('timeline-section').style.display = 'block';
+      document.getElementById('timeline-title').textContent = 'With BFF — 1 Aggregated Request';
+
+      var t = Date.now();
+      var res = await fetch('/bff/dashboard');
+      var data = await res.json();
+      var elapsed = Date.now() - t;
+
+      // Show one row for the aggregated call
+      addTimelineRow('BFF /dashboard', 'ok', elapsed);
+
+      // Show individual service sources
+      var sources = data._meta?.sources || {};
+      Object.entries(sources).forEach(function(entry) {
+        var icon = entry[1] === 'cache' ? '💾 cache' : entry[1] === 'fallback' ? '🔄 fallback' : '✅ live';
+        var row = document.createElement('div');
+        row.className = 'timeline-row';
+        row.style.paddingLeft = '24px';
+        row.style.fontSize = '12px';
+        row.style.color = '#868e96';
+        row.innerHTML = '<span class="svc" style="color:#868e96">↳ ' + entry[0] + '</span><span style="flex:1"></span><span>' + icon + '</span>';
+        document.getElementById('timeline-rows').appendChild(row);
+      });
+
+      document.getElementById('timeline-summary').style.display = 'flex';
+      document.getElementById('sum-count').textContent = '1';
+      document.getElementById('sum-time').textContent = elapsed + 'ms';
+
+      // Fill dashboard cards (BFF already unwrapped and merged)
+      var u = data.user;
+      if (u?._fallback) { setCard('user', 'Fallback data<div class="fallback-tag">degraded</div>', 'degraded'); }
+      else if (u) { setCard('user', u.name + '<br><span style="color:#868e96;font-size:12px">' + u.role + ' · ' + u.department + '</span>', 'loaded'); }
+
+      var o = data.recentOrders;
+      if (o?._fallback) { setCard('orders', 'Fallback data<div class="fallback-tag">degraded</div>', 'degraded'); }
+      else if (o) { setCard('orders', o.total + ' orders<br><span style="color:#868e96;font-size:12px">Latest: ' + (o.orders?.[0]?.product || '-') + '</span>', 'loaded'); }
+
+      var m = data.messages;
+      if (m?._fallback) { setCard('messages', 'Fallback data<div class="fallback-tag">degraded</div>', 'degraded'); }
+      else if (m) { setCard('messages', m.count + ' unread<br><span style="color:#868e96;font-size:12px">' + (m.messages?.[0]?.title || '-') + '</span>', 'loaded'); }
+
+      var c = data.config;
+      if (c?._fallback) { setCard('config', 'Fallback data<div class="fallback-tag">degraded</div>', 'degraded'); }
+      else if (c) { setCard('config', 'v' + c.version + '<br><span style="color:#868e96;font-size:12px">Dark mode: ' + (c.features?.darkMode ? 'on' : 'off') + '</span>', 'loaded'); }
+
+      document.getElementById('raw-json').textContent = JSON.stringify(data, null, 2);
+      document.getElementById('hint').textContent = 'Compare: 1 request vs 6, with automatic caching and fallback.';
+      document.getElementById('btn-without').disabled = false;
+    }
+  </script>
+</body>
+</html>
