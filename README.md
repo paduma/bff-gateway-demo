@@ -72,10 +72,9 @@ Mock Services (:4001)
 
 ## Try It
 
-1. Click "Fetch Dashboard" — see 6 services aggregated into one response with source labels (live/cache/fallback)
-2. Click "Fetch Config" twice — second call hits cache (check the source badge)
-3. Click "Stress Test" — sends 30 parallel requests, some get rate-limited (429)
-4. Click "SSE Chat Stream" — watch tokens stream in real-time through the BFF proxy
+1. Click "Without BFF" — watch 6 requests fire one by one in the timeline, see which services succeed or fail
+2. Click "With BFF" — watch 1 aggregated request complete, with automatic fallback for failed services
+3. Compare: request count, total time, and how dashboard cards handle failures (red = error vs orange = graceful degradation)
 
 ## License
 
